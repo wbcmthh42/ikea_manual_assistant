@@ -51,7 +51,7 @@ LLAMA_CLOUD_API_KEY=<your_llama_cloud_api_key>
 
 1. Do a git clone of the repo:
 ```bash
-git clone https://github.com/llamacloud/ikea-manual-assistant.git
+git clone https://github.com/wbcmthh42/ikea_manual_assistant.git
 ```
 
 #### Project Structure
