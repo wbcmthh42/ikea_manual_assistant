@@ -1,0 +1,11 @@
+llama-index
+llama-parse 
+llama-index-multi-modal-llms-openai 
+git+https://github.com/openai/CLIP.git 
+llama_index.postprocessor.cohere_rerank
+nest-asyncio
+llama-index-llms-azure-openai
+llama-index-embeddings-azure-openai
+llama-index-multi-modal-llms-azure-openai
+streamlit
+Pillow

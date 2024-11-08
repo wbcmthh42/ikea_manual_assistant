@@ -1,0 +1,11 @@
+# Environment variables
+.env
+
+# IDE and editor files
+.DS_Store
+
+# Generate folders
+__pycache__
+data_images/
+parsed_data/
+storage_manuals/
