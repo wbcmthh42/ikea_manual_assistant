@@ -9,7 +9,7 @@ This project demonstrates how to build a multimodal RAG (Retrieval-Augmented Gen
 2. Convert visual instructions into clear, textual explanations
 3. Answer user queries by combining visual and textual understanding
 
-The code is based on the [LlamaIndex RAG Article](https://levelup.gitconnected.com/exploring-multimodal-rag-with-llamaindex-and-gpt-4-or-the-new-anthropic-sonnet-model-96705c877dbb).
+The core part of the code on multimodal RAG using llamaindex is largely referenced from [LlamaIndex RAG Article](https://levelup.gitconnected.com/exploring-multimodal-rag-with-llamaindex-and-gpt-4-or-the-new-anthropic-sonnet-model-96705c877dbb).
 
 ![IKEA Manual Example](images/ikea_manual_example.png)
 *Example of a typical IKEA manual page showing wordless, visual instructions*
