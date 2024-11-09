@@ -124,17 +124,14 @@ You must delete these three directories and run `ikea_app.py` again if you:
 rm -rf data_images parsed_data storage_manuals
 ```
 
-2. Place your IKEA manual PDFs in the `manuals/files` directory
-```bash
-mkdir ./manuals/files
-```
+2. Place your IKEA manual PDFs in the `manuals/files` directory. As an example, we have placed 2 sample manuals (for the IKEA Berglarka and Fredde) for you to test.
 
-## How It Works
+## Brief Overview of How It Works
 
-The application follows these steps (as implemented in `ikea_app.py`):
+The application follows these steps (as implemented in `ikea_app.py`) once the user selects a directory containing the manuals:
 
 1. **Document Processing**:
-   - Uses LlamaParse to extract both text and images from PDF manuals
+   - Uses LlamaParse to extract both text and images from PDF manuals in the directory
    - Processes images using GPT-4o-mini for visual understanding
    - Stores parsed results in `parsed_data/` directory
 
