@@ -198,13 +198,3 @@ Feel free to contribute to this project by:
 1. Adding support for more manual formats
 2. Improving the query processing
 3. Enhancing the user interface
-
-## Note
-
-Remember to add the following images to your `images/` directory for better documentation:
-- ikea_manual_example.png
-- project_structure.png
-- system_architecture.png
-- app_interface.png
-
-These images will help users better understand the project structure and workflow.
