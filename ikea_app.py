@@ -13,15 +13,32 @@ Key Features:
 - Built-in PDF viewer for manual reference
 
 Dependencies:
-- OpenAI API (GPT-4o-mini)
+- Azure OpenAI API (default) or OpenAI API
 - LlamaIndex
 - Streamlit
 - LlamaParse
 - Various utility libraries (dotenv, nest_asyncio, etc.)
 
 Environment Variables Required:
-- OPENAI_API_KEY
+Default (Azure OpenAI):
+- AZURE_OPENAI_API_KEY
+- AZURE_OPENAI_ENDPOINT
+- AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME
+- AZURE_OPENAI_VERSION
+- AZURE_OPENAI_CHAT_DEPLOYMENT_NAME
 - LLAMA_CLOUD_API_KEY
+
+Alternative (OpenAI):
+To use OpenAI instead of Azure OpenAI:
+1. Uncomment the following lines in the code:
+   - OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+   - os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+   - embed_model = OpenAIEmbedding(model="text-embedding-3-large")
+   - llm = OpenAI("gpt-4o-mini")
+2. Comment out the Azure OpenAI configuration in create_index()
+3. Update your .env file to include:
+   - OPENAI_API_KEY=<your-openai-api-key>
+   - LLAMA_CLOUD_API_KEY=<your-llama-cloud-api-key>
 
 Usage:
 Run the script using Streamlit:

@@ -40,12 +40,38 @@ pip install -r requirements.txt
 
 ### 2. API Keys Configuration
 
-Create a `.env` file in the root directory:
+This application uses Azure OpenAI API by default. Create a `.env` file in the root directory:
 ```bash
-OPENAI_API_KEY=<your-openai-api-key>
-LLAMA_CLOUD_API_KEY=<your_llama_cloud_api_key>
+# Default Configuration (Azure OpenAI)
+AZURE_OPENAI_API_KEY=<your-azure-openai-api-key>
+AZURE_OPENAI_ENDPOINT=<your-azure-openai-endpoint>
+AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME=<your-azure-embedding-deployment-name>
+AZURE_OPENAI_VERSION=<your-azure-api-version>
+AZURE_OPENAI_CHAT_DEPLOYMENT_NAME=<your-azure-chat-deployment-name>
+LLAMA_CLOUD_API_KEY=<your-llama-cloud-api-key>
 ```
 
+#### Alternative: Using OpenAI Instead of Azure OpenAI
+If you prefer to use OpenAI instead of Azure OpenAI:
+
+1. Update your `.env` file to include:
+```bash
+OPENAI_API_KEY=<your-openai-api-key>
+LLAMA_CLOUD_API_KEY=<your-llama-cloud-api-key>
+```
+
+2. Modify `ikea_app.py`:
+   - Uncomment these lines near the top of the file:
+     ```python
+     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+     os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+     ```
+   - In the `create_index()` function, uncomment:
+     ```python
+     embed_model = OpenAIEmbedding(model="text-embedding-3-large")
+     llm = OpenAI("gpt-4o-mini")
+     ```
+   - Comment out the Azure OpenAI configuration in the same function
 
 ### 3. Data Preparation
 
