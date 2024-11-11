@@ -42,6 +42,9 @@ from llama_index.core import (
     load_index_from_storage,
     Settings,
 )
+from llama_index.llms.azure_openai import AzureOpenAI
+from llama_index.embeddings.azure_openai import AzureOpenAIEmbedding
+
 from llama_index.core.query_engine import CustomQueryEngine
 from llama_index.core.retrievers import BaseRetriever
 from llama_index.core.schema import NodeWithScore, MetadataMode
@@ -64,11 +67,21 @@ import nest_asyncio
 nest_asyncio.apply()
 load_dotenv('.env')
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") # not used. uncomment if you want to use OpenAI LLM instead of Azure OpenAI
 LLAMA_CLOUD_API_KEY = os.getenv("LLAMA_CLOUD_API_KEY")
+AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
+AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME")
+AZURE_OPENAI_VERSION = os.getenv("AZURE_OPENAI_VERSION")
+AZURE_OPENAI_CHAT_DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME")
 
-os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+# os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY # not used. uncomment if you want to use OpenAI LLM instead of Azure OpenAI
 os.environ["LLAMA_CLOUD_API_KEY"] = LLAMA_CLOUD_API_KEY
+os.environ["AZURE_OPENAI_API_KEY"] = AZURE_OPENAI_API_KEY
+os.environ["AZURE_OPENAI_ENDPOINT"] = AZURE_OPENAI_ENDPOINT
+os.environ["AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME"] = AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME
+os.environ["AZURE_OPENAI_VERSION"] = AZURE_OPENAI_VERSION
+os.environ["AZURE_OPENAI_CHAT_DEPLOYMENT_NAME"] = AZURE_OPENAI_CHAT_DEPLOYMENT_NAME
 
 QA_PROMPT_TMPL = """\
 You are a helpful IKEA assembly assistant that provides detailed guidance about IKEA product manuals.
@@ -228,8 +241,23 @@ def create_index(nodes: List[TextNode]) -> Tuple[BaseRetriever, VectorStoreIndex
             - index: Vector store index
             - llm: Language model instance
     """
-    embed_model = OpenAIEmbedding(model="text-embedding-3-large")
-    llm = OpenAI("gpt-4o-mini")
+    # embed_model = OpenAIEmbedding(model="text-embedding-3-large") # not used. uncomment if you want to use OpenAI Embedding instead of Azure OpenAI Embedding
+    # llm = OpenAI("gpt-4o-mini") # not used. uncomment if you want to use OpenAI LLM instead of Azure OpenAI LLM
+
+    llm = AzureOpenAI(
+        model="gpt-4o-mini",
+        deployment_name=AZURE_OPENAI_CHAT_DEPLOYMENT_NAME,
+        api_key=AZURE_OPENAI_API_KEY,
+        api_version=AZURE_OPENAI_VERSION,
+        azure_endpoint=AZURE_OPENAI_ENDPOINT
+    )
+
+    embed_model = AzureOpenAIEmbedding(
+        model=AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME,
+        api_key=AZURE_OPENAI_API_KEY,
+        api_version=AZURE_OPENAI_VERSION,
+        azure_endpoint=AZURE_OPENAI_ENDPOINT
+    )
 
     Settings.llm = llm
     Settings.embed_model = embed_model
