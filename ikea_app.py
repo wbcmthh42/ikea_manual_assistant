@@ -9,7 +9,7 @@ Key Features:
 - PDF manual parsing with LlamaParse
 - Multimodal processing of text and images
 - Vector-based document retrieval
-- Interactive chat interface with GPT-4o-mini
+- Interactive chat interface with Azure OpenAI (deployment-backed)
 - Built-in PDF viewer for manual reference
 
 Dependencies:
@@ -23,9 +23,14 @@ Environment Variables Required:
 Default (Azure OpenAI):
 - AZURE_OPENAI_API_KEY
 - AZURE_OPENAI_ENDPOINT
-- AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME
-- AZURE_OPENAI_VERSION
+- AZURE_OPENAI_API_VERSION (or AZURE_OPENAI_VERSION)
 - AZURE_OPENAI_CHAT_DEPLOYMENT_NAME
+- AZURE_OPENAI_EMBEDDING_DEPLOYMENT (or AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME)
+- AZURE_OPENAI_EMBEDDING_API_VERSION (optional; defaults to chat API version)
+- AZURE_OPENAI_EMBEDDING_API_KEY (optional; defaults to AZURE_OPENAI_API_KEY)
+- AZURE_OPENAI_CHAT_MODEL (optional, default: gpt-4o-mini)
+- AZURE_OPENAI_MM_DEPLOYMENT_NAME (optional, default: AZURE_OPENAI_CHAT_DEPLOYMENT_NAME)
+- AZURE_OPENAI_MM_MODEL (optional, default: AZURE_OPENAI_CHAT_MODEL)
 - LLAMA_CLOUD_API_KEY
 
 Alternative (OpenAI):
@@ -74,7 +79,7 @@ from llama_index.core.agent import FunctionCallingAgentWorker
 from llama_index.core.tools import QueryEngineTool
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.llms.openai import OpenAI
-from llama_index.multi_modal_llms.openai import OpenAIMultiModal
+from llama_index.multi_modal_llms.azure_openai import AzureOpenAIMultiModal
 from llama_parse import LlamaParse
 import streamlit as st
 from streamlit import session_state as ss
@@ -87,18 +92,21 @@ load_dotenv('.env')
 # OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") # not used. uncomment if you want to use OpenAI LLM instead of Azure OpenAI
 LLAMA_CLOUD_API_KEY = os.getenv("LLAMA_CLOUD_API_KEY")
 AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+AZURE_OPENAI_EMBEDDING_API_KEY = os.getenv("AZURE_OPENAI_EMBEDDING_API_KEY")
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
-AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME")
-AZURE_OPENAI_VERSION = os.getenv("AZURE_OPENAI_VERSION")
+AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")
+AZURE_OPENAI_VERSION = os.getenv("AZURE_OPENAI_API_VERSION")
+AZURE_OPENAI_EMBEDDING_VERSION = os.getenv("AZURE_OPENAI_EMBEDDING_API_VERSION")
 AZURE_OPENAI_CHAT_DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME")
+AZURE_OPENAI_CHAT_MODEL = "gpt-4o-mini"
 
 # os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY # not used. uncomment if you want to use OpenAI LLM instead of Azure OpenAI
-os.environ["LLAMA_CLOUD_API_KEY"] = LLAMA_CLOUD_API_KEY
-os.environ["AZURE_OPENAI_API_KEY"] = AZURE_OPENAI_API_KEY
-os.environ["AZURE_OPENAI_ENDPOINT"] = AZURE_OPENAI_ENDPOINT
-os.environ["AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME"] = AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME
-os.environ["AZURE_OPENAI_VERSION"] = AZURE_OPENAI_VERSION
-os.environ["AZURE_OPENAI_CHAT_DEPLOYMENT_NAME"] = AZURE_OPENAI_CHAT_DEPLOYMENT_NAME
+# os.environ["LLAMA_CLOUD_API_KEY"] = LLAMA_CLOUD_API_KEY
+# os.environ["AZURE_OPENAI_API_KEY"] = AZURE_OPENAI_API_KEY
+# os.environ["AZURE_OPENAI_ENDPOINT"] = AZURE_OPENAI_ENDPOINT
+# os.environ["AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME"] = AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME
+# os.environ["AZURE_OPENAI_VERSION"] = AZURE_OPENAI_VERSION
+# os.environ["AZURE_OPENAI_CHAT_DEPLOYMENT_NAME"] = AZURE_OPENAI_CHAT_DEPLOYMENT_NAME
 
 QA_PROMPT_TMPL = """\
 You are a helpful IKEA assembly assistant that provides detailed guidance about IKEA product manuals.
@@ -128,7 +136,13 @@ Answer: """
 
 QA_PROMPT = PromptTemplate(QA_PROMPT_TMPL)
 
-gpt_4o_mm = OpenAIMultiModal(model="gpt-4o")
+azure_mm_llm = AzureOpenAIMultiModal(
+    model=AZURE_OPENAI_CHAT_MODEL,
+    deployment_name=AZURE_OPENAI_CHAT_DEPLOYMENT_NAME,
+    api_key=AZURE_OPENAI_API_KEY,
+    api_version=AZURE_OPENAI_VERSION,
+    azure_endpoint=AZURE_OPENAI_ENDPOINT,
+)
 
 # Configure streamlit UI page interface
 st.set_page_config(
@@ -223,10 +237,15 @@ def get_text_nodes(md_json_objs, image_dir) -> t.List[TextNode]:
         json_dicts = result["pages"]
         document_name = result["file_path"].split('/')[-1]
 
-        docs = [doc["md"] for doc in json_dicts]  # extract text
-        image_files = _get_sorted_image_files(image_dir)  # extract images
+        for page in json_dicts:
+            doc = page.get("md", "")
+            # Prefer the page's own image reference to avoid cross-document mixups
+            image_path = ""
+            if page.get("images"):
+                image_path = page["images"][0].get("path", "")
+            if image_path and not os.path.isabs(image_path):
+                image_path = os.path.join(image_dir, os.path.basename(image_path))
 
-        for idx, doc in enumerate(docs):
             # Split the text into chunks
             chunks = text_splitter.split_text(doc)
 
@@ -235,15 +254,26 @@ def get_text_nodes(md_json_objs, image_dir) -> t.List[TextNode]:
                 node = TextNode(
                     text=chunk,
                     metadata={
-                        "image_path": str(image_files[idx]), 
-                        "page_num": idx + 1, 
+                        "image_path": image_path,
+                        "page_num": page.get("page", 0),
                         "document_name": document_name,
-                        "chunk_idx": chunk_idx
+                        "chunk_idx": chunk_idx,
                     },
                 )
                 nodes.append(node)
 
     return nodes
+
+def _is_docstore_empty(docstore_path: str) -> bool:
+    if not os.path.exists(docstore_path):
+        return True
+    try:
+        with open(docstore_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return not bool(data)
+    except (json.JSONDecodeError, OSError):
+        return True
+
 
 def create_index(nodes: List[TextNode]) -> Tuple[BaseRetriever, VectorStoreIndex, OpenAI]:
     """
@@ -262,7 +292,7 @@ def create_index(nodes: List[TextNode]) -> Tuple[BaseRetriever, VectorStoreIndex
     # llm = OpenAI("gpt-4o-mini") # not used. uncomment if you want to use OpenAI LLM instead of Azure OpenAI LLM
 
     llm = AzureOpenAI(
-        model="gpt-4o-mini",
+        model=AZURE_OPENAI_CHAT_MODEL,
         deployment_name=AZURE_OPENAI_CHAT_DEPLOYMENT_NAME,
         api_key=AZURE_OPENAI_API_KEY,
         api_version=AZURE_OPENAI_VERSION,
@@ -271,20 +301,23 @@ def create_index(nodes: List[TextNode]) -> Tuple[BaseRetriever, VectorStoreIndex
 
     embed_model = AzureOpenAIEmbedding(
         model=AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME,
-        api_key=AZURE_OPENAI_API_KEY,
-        api_version=AZURE_OPENAI_VERSION,
-        azure_endpoint=AZURE_OPENAI_ENDPOINT
+        api_key=AZURE_OPENAI_EMBEDDING_API_KEY or AZURE_OPENAI_API_KEY,
+        api_version=AZURE_OPENAI_EMBEDDING_VERSION,
+        azure_endpoint=AZURE_OPENAI_ENDPOINT,
     )
 
     Settings.llm = llm
     Settings.embed_model = embed_model
 
-    if not os.path.exists("storage_manuals"):
-        index = VectorStoreIndex(nodes, embed_model=embed_model)
-        index.storage_context.persist(persist_dir="./storage_manuals")
-    else:
-        ctx = StorageContext.from_defaults(persist_dir="./storage_manuals")
+    storage_dir = "./storage_manuals"
+    docstore_path = os.path.join(storage_dir, "docstore.json")
+
+    if os.path.exists(storage_dir) and not _is_docstore_empty(docstore_path):
+        ctx = StorageContext.from_defaults(persist_dir=storage_dir)
         index = load_index_from_storage(ctx)
+    else:
+        index = VectorStoreIndex(nodes, embed_model=embed_model)
+        index.storage_context.persist(persist_dir=storage_dir)
 
     retriever = index.as_retriever()
 
@@ -308,7 +341,7 @@ def main(file_dir: str) -> None:
             result_type="markdown",
             parsing_instruction="You are given IKEA assembly instruction manuals",
             use_vendor_multimodal_model=True,
-            vendor_multimodal_model_name="openai-gpt4o",
+            vendor_multimodal_model_name=AZURE_OPENAI_CHAT_MODEL,
             show_progress=True,
             verbose=True,
             invalidate_cache=True,
@@ -317,36 +350,62 @@ def main(file_dir: str) -> None:
             language="en"
         )
 
-        # Check if parsed files already exist
-        if os.path.exists('parsed_data/md_json_objs.json') and os.path.exists('parsed_data/image_dicts.json'):
-            # Load existing files
-            with open('parsed_data/md_json_objs.json', 'r', encoding='utf-8') as f:
+        # Parse manuals (reuse cached parse only if inputs match)
+        files = get_data_files(DATA_DIR)
+        pdf_files = [f for f in files if f.lower().endswith(".pdf")]
+        if not pdf_files:
+            st.error(f"No PDF manuals found in: {DATA_DIR}")
+            return
+
+        os.makedirs('parsed_data', exist_ok=True)
+        md_json_path = 'parsed_data/md_json_objs.json'
+        image_dicts_path = 'parsed_data/image_dicts.json'
+        manifest_path = 'parsed_data/manifest.json'
+
+        current_manifest = {
+            "files": sorted(os.path.abspath(f) for f in pdf_files),
+        }
+        use_cached = (
+            os.path.exists(md_json_path)
+            and os.path.exists(image_dicts_path)
+            and os.path.exists(manifest_path)
+        )
+
+        if use_cached:
+            with open(manifest_path, 'r', encoding='utf-8') as f:
+                cached_manifest = json.load(f)
+            if cached_manifest.get("files") != current_manifest["files"]:
+                use_cached = False
+
+        if use_cached:
+            with open(md_json_path, 'r', encoding='utf-8') as f:
                 md_json_objs = json.load(f)
-            with open('parsed_data/image_dicts.json', 'r', encoding='utf-8') as f:
+            with open(image_dicts_path, 'r', encoding='utf-8') as f:
                 image_dicts = json.load(f)
-        else:
-            # Create directory if it doesn't exist
-            os.makedirs('parsed_data', exist_ok=True)
+            if not md_json_objs:
+                use_cached = False
 
-            # Parse new files
-            files = get_data_files(DATA_DIR)
-
-            md_json_objs = parser.get_json_result(files)
+        if not use_cached:
+            md_json_objs = parser.get_json_result(pdf_files)
             image_dicts = parser.get_images(md_json_objs, download_path="data_images")
 
-            # Save the parsed results
-            with open('parsed_data/md_json_objs.json', 'w', encoding='utf-8') as f:
+            with open(md_json_path, 'w', encoding='utf-8') as f:
                 json.dump(md_json_objs, f, ensure_ascii=False, indent=2)
-            with open('parsed_data/image_dicts.json', 'w', encoding='utf-8') as f:
+            with open(image_dicts_path, 'w', encoding='utf-8') as f:
                 json.dump(image_dicts, f, ensure_ascii=False, indent=2)
+            with open(manifest_path, 'w', encoding='utf-8') as f:
+                json.dump(current_manifest, f, ensure_ascii=False, indent=2)
 
         text_nodes = get_text_nodes(md_json_objs, "data_images")
+        if not text_nodes:
+            st.error("No text content was parsed from the manuals. Check your PDF files.")
+            return
         retriever, index, llm = create_index(text_nodes)
 
         query_engine = MultimodalQueryEngine(
             qa_prompt=QA_PROMPT,
             retriever=index.as_retriever(similarity_top_k=9),
-            multi_modal_llm=gpt_4o_mm,
+            multi_modal_llm=azure_mm_llm,
             text_nodes=text_nodes,
             node_postprocessors=[],
         )
@@ -390,13 +449,13 @@ class MultimodalQueryEngine(CustomQueryEngine):
     Attributes:
         qa_prompt (PromptTemplate): Template for question-answering
         retriever (BaseRetriever): Retriever for finding relevant nodes
-        multi_modal_llm (OpenAIMultiModal): Multimodal language model
+        multi_modal_llm (AzureOpenAIMultiModal): Multimodal language model
         text_nodes (List[TextNode]): List of text nodes from the document
         node_postprocessors (Optional[List[BaseNodePostprocessor]]): Post-processing steps for nodes
     """
     qa_prompt: PromptTemplate
     retriever: BaseRetriever
-    multi_modal_llm: OpenAIMultiModal
+    multi_modal_llm: AzureOpenAIMultiModal
     node_postprocessors: Optional[List[BaseNodePostprocessor]]
     text_nodes: List[TextNode]
 
@@ -404,7 +463,7 @@ class MultimodalQueryEngine(CustomQueryEngine):
         self,
         qa_prompt: PromptTemplate,
         retriever: BaseRetriever,
-        multi_modal_llm: OpenAIMultiModal,
+        multi_modal_llm: AzureOpenAIMultiModal,
         text_nodes: List[TextNode],
         node_postprocessors: Optional[List[BaseNodePostprocessor]] = [],
     ):
@@ -441,10 +500,13 @@ class MultimodalQueryEngine(CustomQueryEngine):
         max_page = max(page_numbers)
 
         # create image nodes from the image associated with those nodes
-        image_nodes = [
-            NodeWithScore(node=ImageNode(image_path=n.node.metadata["image_path"]))
-            for n in nodes
-        ]
+        image_nodes = []
+        for n in nodes:
+            image_path = n.node.metadata.get("image_path", "")
+            if image_path and os.path.exists(image_path):
+                image_nodes.append(
+                    NodeWithScore(node=ImageNode(image_path=image_path))
+                )
 
         # create context string from parsed markdown text
         ctx_str = "\n\n".join(
